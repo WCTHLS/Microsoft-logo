@@ -1,0 +1,19 @@
+# Web API and UI
+fastapi==0.141.1
+python-multipart==0.0.32
+streamlit==1.62.0
+uvicorn[standard]==0.52.4
+
+# Image processing and rendering
+cairosvg==2.9.0
+numpy==2.5.2
+opencv-python==5.0.0.93
+Pillow==12.3.0
+pytesseract==0.3.13
+scipy==1.18.1
+
+# PDF processing
+PyMuPDF==1.28.2
+
+# Configuration
+python-dotenv==1.2.3
