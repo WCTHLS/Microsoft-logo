@@ -113,6 +113,20 @@ class DiamondRenderer(BaseRenderer):
     PROGRAM_TRACKING_RATIO = 0.22
     DATE_TRACKING_RATIO = 0.25
 
+    # ------------------------------------------------------------------
+    # ACTIVITY BANNER vertical safety margins (fraction of height)
+    # ------------------------------------------------------------------
+    # The activity block is CENTRED on F_ACTIVITY and must never touch the
+    # separator above it or the main title below it. These small gaps are
+    # subtracted from the space available between those neighbours; the
+    # activity font then shrinks (and the text re-wraps) so the whole
+    # block fits inside what's left. Kept intentionally small so a normal
+    # single-line activity still renders at full size, exactly like the
+    # reference badge -- only longer/multi-line values are shrunk.
+    ACTIVITY_TOP_GAP = 0.006   # clearance below the separator line
+    ACTIVITY_BOTTOM_GAP = 0.006  # clearance above the title's top edge
+    ACTIVITY_MIN_FONT = 20     # never shrink the activity text below this
+
     def __init__(self):
         super().__init__()
 
@@ -163,6 +177,110 @@ class DiamondRenderer(BaseRenderer):
                 return font
             size -= 2
         return self.get_font(min_size, weight=weight)
+
+    # ------------------------------------------------------------------
+    # WIDTH + HEIGHT aware fitting (used by the activity banner).
+    #
+    # Unlike _fit_font (which only checks horizontal width and therefore
+    # lets a multi-line block grow DOWNWARD past its neighbours), this
+    # picks the largest font whose wrapped block fits BOTH the target
+    # width AND a maximum block height. The text is re-wrapped by pixel
+    # width at every trial size, so a long/character-heavy value shrinks
+    # to fit its allotted space instead of overflowing into the title.
+    # The vertical CENTRE stays pinned to F_ACTIVITY, so the spacing to
+    # the other lines is identical on every badge -- only the size adapts.
+    # ------------------------------------------------------------------
+    def _wrap_pixels(self, draw, text, font, max_w):
+        """Greedy word-wrap by measured pixel width (fewest lines that fit
+        max_w at this font size)."""
+        words = str(text).split()
+        if not words:
+            return [str(text)]
+        lines, cur = [], ""
+        for w in words:
+            trial = (cur + " " + w).strip()
+            if not cur or draw.textbbox((0, 0), trial, font=font)[2] <= max_w:
+                cur = trial
+            else:
+                lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def _balanced_wrap(self, draw, text, font, max_w, max_lines):
+        """Wrap `text` into at most `max_lines` lines, every line <= max_w,
+        preferring an EVEN split (so a 2-line block reads as two balanced
+        halves instead of one long line + one orphan word). Returns the
+        line list, or None if it simply cannot fit in max_lines at this
+        font size."""
+        words = str(text).split()
+        if not words:
+            return [str(text)]
+
+        def fits(line):
+            return draw.textbbox((0, 0), line, font=font)[2] <= max_w
+
+        # Fast path: everything on one line.
+        if fits(" ".join(words)):
+            return [" ".join(words)]
+
+        # Try k = 2 .. max_lines, choosing the split that minimises the
+        # WIDEST line (most balanced) while keeping every line within max_w.
+        for k in range(2, max_lines + 1):
+            best, best_metric = None, None
+            # enumerate all ways to break `words` into k contiguous groups
+            import itertools
+            n = len(words)
+            for cuts in itertools.combinations(range(1, n), k - 1):
+                idx = [0, *cuts, n]
+                groups = [" ".join(words[idx[j]:idx[j + 1]]) for j in range(k)]
+                widths = [draw.textbbox((0, 0), g, font=font)[2] for g in groups]
+                if max(widths) > max_w:
+                    continue
+                metric = max(widths)  # minimise the widest line
+                if best_metric is None or metric < best_metric:
+                    best, best_metric = groups, metric
+            if best is not None:
+                return best
+        return None  # cannot fit within max_lines at this size
+
+    def _fit_wrapped_block(self, draw, text, target_w, max_block_h,
+                           max_size, weight="semibold",
+                           line_gap=1.16, min_size=14, max_lines=3):
+        """Largest font whose BALANCED wrapped block fits target_w wide AND
+        max_block_h tall (within max_lines). Returns (font, lines)."""
+        size = max_size
+        while size >= min_size:
+            font = self.get_font(size, weight=weight)
+            lines = self._balanced_wrap(draw, text, font, target_w, max_lines)
+            if lines is not None:
+                asc, desc = font.getmetrics()
+                lh = int(round((asc + desc) * line_gap))
+                if lh * len(lines) <= max_block_h:
+                    return font, lines
+            size -= 2
+        # Last resort: shrink onto whatever fits width, ignore balance.
+        font = self.get_font(min_size, weight=weight)
+        return font, self._wrap_pixels(draw, text, font, target_w)
+
+    def _title_top_frac(self, image, title):
+        """Top edge (as a fraction of height) of the main title block,
+        so the activity banner can be kept clear of it. Mirrors the
+        sizing used by draw_main_title."""
+        if not title:
+            return self.F_TITLE - 0.04
+        draw = ImageDraw.Draw(image)
+        t = str(title).upper()
+        target_w = int(image.width * self.W_TITLE)
+        font = self._fit_font(
+            draw, t, target_w,
+            max_size=self.MAIN_TITLE_FONT_SIZE + 30, weight="bold",
+        )
+        asc, desc = font.getmetrics()
+        lh = (asc + desc) * 1.16
+        cy = image.height * self.F_TITLE
+        return (cy - lh / 2) / image.height
 
     def _draw_block_centered(self, image, lines, center_frac, font,
                              colour, stroke=0, line_gap=1.16):
@@ -404,14 +522,37 @@ class DiamondRenderer(BaseRenderer):
             self.ACTIVITY_TINT,
         )
         target_w = int(image.width * self.W_ACTIVITY)
-        lines = textwrap.wrap(text, width=18)
-        widest = max(lines, key=len) if lines else text
-        # SEMIBOLD (thicker) light-colour activity text.
-        font = self._fit_font(
-            draw, widest, target_w,
+
+        # --------------------------------------------------------------
+        # Height-aware auto-fit so long / character-heavy activity names
+        # shrink to fit instead of overflowing into the title (the old
+        # width-only fit let "Frontier Transformation Engineer" spill into
+        # "TITAN"), WITHOUT over-shrinking it onto one tiny line.
+        #
+        # KEY FIX: the block is centred in, and allowed to use the FULL
+        # vertical gap between the separator and the title's top edge --
+        # NOT a tight symmetric box around F_ACTIVITY. The title sits
+        # closer below the old anchor than the separator sits above it, so
+        # a symmetric box wasted ~40% of the real room (~150px of ~249px)
+        # and forced the text far smaller than necessary. Centring in the
+        # gap keeps the spacing to both neighbours consistent on every
+        # badge (always vertically centred in that fixed gap) while giving
+        # long names enough room to render as two balanced, readable lines.
+        # A short name still fits at full size on one line, exactly like
+        # the reference badge -- only long/character-heavy names shrink.
+        # --------------------------------------------------------------
+        title = badge.achievement_name if badge is not None else None
+        band_top = self.F_SEPARATOR + self.ACTIVITY_TOP_GAP
+        band_bottom = self._title_top_frac(image, title) - self.ACTIVITY_BOTTOM_GAP
+        center_frac = (band_top + band_bottom) / 2.0
+        max_block_h = max(1, int(round((band_bottom - band_top) * image.height)))
+
+        font, lines = self._fit_wrapped_block(
+            draw, text, target_w, max_block_h,
             max_size=self.ACTIVITY_FONT_SIZE + 30, weight="semibold",
+            min_size=self.ACTIVITY_MIN_FONT, max_lines=3,
         )
-        self._draw_block_centered(image, lines, self.F_ACTIVITY, font, colour)
+        self._draw_block_centered(image, lines, center_frac, font, colour)
 
     def draw_main_title(self, image, text):
         if not text:
