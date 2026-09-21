@@ -64,7 +64,7 @@ class CircleRenderer:
     ACHIEVEMENT_Y = CENTER_Y + round(INNER_RADIUS * 0.030)
     ACHIEVEMENT_FONT_SIZE = 44
     ACHIEVEMENT_FONT_WEIGHT = 700
-    ACHIEVEMENT_USABLE = round(INNER_RADIUS * 1.45)
+    ACHIEVEMENT_USABLE = 270
     ACHIEVEMENT_MIN = 18
 
     # ------------------------------------------------------------------
