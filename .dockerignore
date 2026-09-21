@@ -1,0 +1,11 @@
+node_modules
+.venv
+venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.env
+dist
+badge-generator_Frontend/dist
+badge-generator_Frontend/node_modules

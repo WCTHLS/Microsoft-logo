@@ -18,6 +18,7 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from models.badge_details import BadgeDetails
@@ -208,14 +209,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.get("/")
-def root():
-    return {
-        "status": "ok",
-        "message": "Badge Generator API is running.",
-    }
 
 
 @app.get("/api/health")
@@ -454,3 +447,15 @@ def _bad_color(name: str):
             ),
         },
     )
+
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+else:
+    @app.get("/")
+    def root():
+        return {
+            "status": "ok",
+            "message": "Badge Generator API is running.",
+        }

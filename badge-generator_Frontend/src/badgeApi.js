@@ -1,7 +1,9 @@
 // ============================================================================
 //  src/badgeApi.js  —  the ONLY file that talks to your FastAPI backend
 // ============================================================================
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = window.location.port === "5173"
+  ? `http://${window.location.hostname}:8000`
+  : "";
 
 // ----------------------------------------------------------------------------
 // generateBadge(pdfFile, outerColor, innerColor, partnerLogoFile)
