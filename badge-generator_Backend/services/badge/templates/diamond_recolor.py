@@ -222,175 +222,99 @@ def recolor_diamond_badge(
     shading: float = SHADING_STRENGTH,
     white_gap_ring: bool = True,
     remove_background: bool = True,
-    clean_seams: bool = True,
+    clean_seams: bool = False,
 ) -> Image.Image:
-    """Recolour the complete diamond using one coordinated badge theme."""
+    """Recolour the diamond badge while preserving 100% of template sharpness,
+    3D ribbon depth, textures, and anti-aliased edge transitions."""
     source = image.convert("RGBA")
+    
+    # Detect requested theme
+    theme = _detect_coordinated_theme(inner_grade, outer_grade)
+    
+    # Native template support:
+    # Purple uses diamond_template.png directly
+    if theme == "purple":
+        return source
+    # Teal uses diamond_template_teal.jpg directly
+    if theme == "teal":
+        return source
+
     arr = np.asarray(source).astype(np.float32)
     rgb = arr[:, :, :3] / 255.0
     alpha = arr[:, :, 3].copy()
-    height, width = alpha.shape
-    opaque = alpha > 0
+    opaque = alpha > 10
 
-    # Use one theme for face, frame and ribbon. This is the important fix.
-    theme = _detect_coordinated_theme(inner_grade, outer_grade)
-    if theme:
-        inner_start, inner_end = _official_grade(theme, "inner")
-        outer_start, outer_end = _official_grade(theme, "outer")
-        ribbon_back_start, ribbon_back_end = _official_grade(theme, "ribbon_back")
-        ribbon_front_start, ribbon_front_end = _official_grade(theme, "ribbon_front")
+    # For other colors derived from the teal template, base hue is teal (H≈0.510)
+    base_h = 0.510
+
+    # Determine target hue and saturation scaling
+    if theme == "blue":
+        target_h = 0.575
+        sat_scale = 1.0
+    elif theme and theme in THEME_GRADES:
+        stops = _split_stops(THEME_GRADES[theme]["outer"])
+        ref_rgb = _hex_to_rgb(stops[0]) / 255.0
+        target_h, target_l, target_s = colorsys.rgb_to_hls(ref_rgb[0], ref_rgb[1], ref_rgb[2])
+        sat_scale = float(np.clip(target_s / 0.50, 0.5, 2.0))
     else:
-        inner_start, inner_end = _resolve_custom_grade(inner_grade, "inner")
-        outer_start, outer_end = _resolve_custom_grade(outer_grade, "outer")
-        # For custom themes, derive two related ribbon grades while preserving
-        # the same separation used by the official themes.
-        ribbon_back_start, ribbon_back_end = (
-            _lighten(outer_start, 0.06, 0.0),
-            _lighten(outer_end, 0.04, 0.0),
-        )
-        ribbon_front_start, ribbon_front_end = (
-            _lighten(outer_start, -0.02, 0.0),
-            _lighten(outer_end, -0.08, 0.0),
-        )
+        stops = _split_stops(outer_grade) or _split_stops(inner_grade)
+        ref_rgb = _hex_to_rgb(stops[0]) / 255.0 if stops else np.array([0.42, 0.25, 0.62], dtype=np.float32)
+        target_h, target_l, target_s = colorsys.rgb_to_hls(ref_rgb[0], ref_rgb[1], ref_rgb[2])
+        sat_scale = 1.0
 
-    # Geometry mask of the central face. Bright source highlights cannot leak
-    # into the ribbon classification.
-    face_points = [
-        (0.500 * width, 0.074 * height),
-        (0.086 * width, 0.207 * height),
-        (0.086 * width, 0.620 * height),
-        (0.500 * width, 0.739 * height),
-        (0.914 * width, 0.620 * height),
-        (0.914 * width, 0.207 * height),
-    ]
-    face_image = Image.new("L", (width, height), 0)
-    ImageDraw.Draw(face_image).polygon(face_points, fill=255)
-    face_geometry = np.asarray(face_image) > 0
+    delta_h = target_h - base_h
 
-    lightness = (rgb.max(2) + rgb.min(2)) / 2.0
-    chroma = rgb.max(2) - rgb.min(2)
-    neutral_white = (lightness > WHITE_L) & (chroma < 0.035) & opaque
+    # Convert entire template to HLS
+    h, l, s = _rgb_to_hls_np(rgb)
 
-    # Preserve the source template's exact front-ribbon overlap at the lower
-    # V seam. The face polygon remains unchanged. Only bright source pixels in
-    # the seam area are classified as ribbon, so no extra parallel strip is
-    # created above the ribbon.
-    lower_seam_zone = np.zeros_like(face_geometry)
-    lower_seam_zone[int(0.585 * height):int(0.755 * height), :] = True
-    source_front_ribbon = lower_seam_zone & (lightness > 0.40) & opaque
+    # Only protect truly neutral white/near-white border pixels
+    neutral_white = (l > 0.88) & (s < 0.10) & opaque
+    colored = opaque & ~neutral_white
 
-    inner_mask = face_geometry & opaque & ~neutral_white & ~source_front_ribbon
-    outer_mask = ((~face_geometry) | source_front_ribbon) & opaque & ~neutral_white
+    # Shift hue and scale saturation for colored areas
+    new_h = h.copy()
+    new_s = s.copy()
 
-    # Keep the exact source geometry for the complete outer artwork.
-    # Do not create ribbon polygons: the template already contains the correct
-    # ribbon faces, seam, side tabs and anti-aliased edges.
-    outer_frame_mask = outer_mask
-    white_mask = neutral_white
+    new_h[colored] = (h[colored] + delta_h) % 1.0
+    new_s[colored] = np.clip(s[colored] * sat_scale, 0.0, 1.0)
 
-    # Diagonal grade (see GRADIENT_ANGLE_DEG note above), shared by both
-    # zones so face, frame and ribbon read as one coordinated light source.
-    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
-    angle = np.deg2rad(angle_deg)
-    projection = np.cos(angle) * xx + np.sin(angle) * yy
+    # Convert back to RGB (lightness stays 100% original)
+    new_rgb = _hls_to_rgb_np(new_h, l, new_s)
 
-    def paint(mask, start, end):
-        if not mask.any():
-            return
-        values = projection[mask]
-        t = (values - values.min()) / (values.max() - values.min() + 1e-6)
-        colour = (
-            start[None, :] * (1.0 - t[:, None])
-            + end[None, :] * t[:, None]
-        ) / 255.0
-
-        # Disabled by default. Kept only for API compatibility.
-        if shading > 0.0:
-            zone_lightness = lightness[mask]
-            delta = np.clip(
-                zone_lightness - float(np.median(zone_lightness)),
-                -0.06,
-                0.06,
-            )
-            colour = np.clip(colour + delta[:, None] * shading, 0.0, 1.0)
-
-        rgb[mask] = colour
-
-    paint(inner_mask, inner_start, inner_end)
-
-    # Preserve the template's local light/dark structure for the entire outer
-    # artwork. This retains the two ribbon faces instead of flattening them
-    # into one colour. The target diagonal grade still controls the overall
-    # blue. Shading is applied as a lightness-only nudge in HLS space (not a
-    # per-channel RGB multiply) so bright highlights can't clip one channel
-    # before another and drift the hue toward cyan.
-    if outer_frame_mask.any():
-        values = projection[outer_frame_mask]
-        t = (values - values.min()) / (values.max() - values.min() + 1e-6)
-        base_colour = (
-            outer_start[None, :] * (1.0 - t[:, None])
-            + outer_end[None, :] * t[:, None]
-        ) / 255.0
-
-        base_h, base_l, base_s = _rgb_to_hls_np(base_colour)
-
-        src_l = lightness[outer_frame_mask]
-        median_l = float(np.median(src_l))
-        delta_l = np.clip(
-            (src_l - median_l) * OUTER_SHADE_GAIN, -OUTER_SHADE_CLIP, OUTER_SHADE_CLIP
-        )
-        shaded_l = np.clip(base_l + delta_l, 0.0, 1.0)
-
-        colour = np.clip(_hls_to_rgb_np(base_h, shaded_l, base_s), 0.0, 1.0)
-        rgb[outer_frame_mask] = colour
-
-    # Separate transparent canvas background from the interior white gap.
-    background_mask = np.zeros_like(white_mask)
-    seam_mask = np.zeros_like(white_mask)
-    if _HAS_SCIPY and white_mask.any():
-        labels, count = ndimage.label(white_mask)
-        if count:
-            border_labels = (
-                set(labels[0, :])
-                | set(labels[-1, :])
-                | set(labels[:, 0])
-                | set(labels[:, -1])
-            )
-            border_labels.discard(0)
-            if border_labels:
-                background_mask = np.isin(labels, list(border_labels))
-
-            if clean_seams:
-                sizes = ndimage.sum(
-                    np.ones_like(labels), labels, index=range(1, count + 1)
-                )
-                seam_labels = [
-                    label
-                    for label in (np.where(sizes < SEAM_MAX_SIZE)[0] + 1)
-                    if label not in border_labels
-                ]
-                if seam_labels:
-                    seam_mask = np.isin(labels, seam_labels)
-
-    # Tiny antialias specks use the coordinated outer start, never a separately
-    # inferred colour.
-    if seam_mask.any():
-        rgb[seam_mask] = outer_start / 255.0
+    # Ensure white pixels remain untouched
+    new_rgb[neutral_white] = rgb[neutral_white]
 
     output = np.dstack(
-        [np.clip(rgb * 255.0, 0, 255), alpha]
+        [np.clip(new_rgb * 255.0, 0, 255), alpha]
     ).astype(np.uint8)
-
-    if remove_background and background_mask.any():
-        output[background_mask, 3] = 0
 
     return Image.fromarray(output, "RGBA")
 
 
 def load_diamond_template(badge) -> Image.Image:
-    base = Image.open(
-        Path(__file__).parent.parent / "templates" / "diamond_template.png"
+    """Load diamond_template.png for purple, and diamond_template_teal.jpg for teal and blue."""
+    template_dir = Path(__file__).parent.parent / "templates"
+    
+    theme = _detect_coordinated_theme(
+        badge.inner_colour if hasattr(badge, 'inner_colour') else "",
+        badge.outer_colour if hasattr(badge, 'outer_colour') else "",
     )
+    
+    # Purple uses the native purple template
+    if theme == "purple":
+        template_path = template_dir / "diamond_template.png"
+    else:
+        # Teal, blue, and other colors use diamond_template_teal.jpg
+        template_path = template_dir / "diamond_template_teal.jpg"
+        if not template_path.exists():
+            template_path = template_dir / "diamond_template_teal.png"
+        if not template_path.exists():
+            template_path = template_dir / "diamond_template.png"
+
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template not found at {template_path}")
+    
+    base = Image.open(template_path).convert("RGBA")
     return recolor_diamond_badge(
         base,
         outer_grade=badge.outer_colour,

@@ -98,11 +98,15 @@ badge_generator/
 
 ## Prerequisites
 
-Before running the application, make sure the following are installed:
+Before running the application, make sure the following are installed on your machine:
 
-- Python - 3.13.14
-- Node.js and npm
-- Git
+- **Python** - 3.10+ (Recommended: 3.12 / 3.13)
+- **Node.js** (v18+) & **npm**
+- **Git**
+- **Tesseract OCR** - v5.0.0+ *(Required for document text & OCR extraction)*
+  - **Windows**: Download and install from [UB-Mannheim Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) or via `winget install UB-Mannheim.TesseractOCR`, then ensure `C:\Program Files\Tesseract-OCR` is added to your system `PATH`.
+  - **Linux (Ubuntu/Debian)**: `sudo apt install tesseract-ocr`
+  - **macOS**: `brew install tesseract`
 
 ## Installation
 
@@ -110,57 +114,68 @@ Clone the repository and open the project directory before setting up the backen
 
 ---
 
-## Backend Setup
+## Backend Setup & Execution
 
 Navigate to the backend directory.
 
 ### Using PowerShell
 
+1. Navigate to backend:
 ```powershell
 cd .\badge-generator_Backend
 ```
 
-Create a Python virtual environment:
-
+2. Create a Python virtual environment:
 ```powershell
 python -m venv .venv
 ```
 
-Activate the virtual environment:
-
+3. Activate the virtual environment:
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
+*(If you encounter an execution policy restriction, run: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process`)*
 
-Install the required Python packages:
-
+4. Install the required Python packages:
 ```powershell
 pip install -r requirements.txt
 ```
 
+5. **Run the Backend API Server (FastAPI)**:
+```powershell
+uvicorn api:app --reload --port 8000
+```
+*(The API will be live at `http://127.0.0.1:8000` with interactive docs at `http://127.0.0.1:8000/docs`)*
+
+---
+
 ### Using Command Prompt (CMD)
 
+1. Navigate to backend:
 ```cmd
 cd badge-generator_Backend
 ```
 
-Create a Python virtual environment:
-
+2. Create a Python virtual environment:
 ```cmd
 python -m venv .venv
 ```
 
-Activate the virtual environment:
-
+3. Activate the virtual environment:
 ```cmd
 .venv\Scripts\activate.bat
 ```
 
-Install the required Python packages:
-
+4. Install the required Python packages:
 ```cmd
 pip install -r requirements.txt
 ```
+
+5. **Run the Backend API Server (FastAPI)**:
+```cmd
+uvicorn api:app --reload --port 8000
+```
+*(The API will be live at `http://127.0.0.1:8000` with interactive docs at `http://127.0.0.1:8000/docs`)*
 
 ---
 
