@@ -64,6 +64,8 @@ class CircleRenderer:
     ACHIEVEMENT_Y = CENTER_Y + round(INNER_RADIUS * 0.030)
     ACHIEVEMENT_FONT_SIZE = 44
     ACHIEVEMENT_FONT_WEIGHT = 700
+    ACHIEVEMENT_USABLE = round(INNER_RADIUS * 1.45)
+    ACHIEVEMENT_MIN = 18
 
     # ------------------------------------------------------------------
     # PARTNER LOGO PLACEMENT
@@ -84,7 +86,7 @@ class CircleRenderer:
     STACK_PARTNER_LOGO_MAX_WIDTH = round(INNER_RADIUS * 1.40)
     STACK_PARTNER_LOGO_MAX_HEIGHT = round(INNER_RADIUS * 0.27)
     STACK_ACHIEVEMENT_FONT_SIZE = 34
-    STACK_ACHIEVEMENT_USABLE = 320
+    STACK_ACHIEVEMENT_USABLE = round(INNER_RADIUS * 1.40)
     STACK_ACHIEVEMENT_MIN = 18
 
     # ------------------------------------------------------------------
@@ -427,7 +429,16 @@ class CircleRenderer:
             # Fall through to achievement/empty if logo invalid.
 
         # ---------- CASE 3: ONLY achievement (or neither) -> centered ----
-        return self._achievement_text_svg(badge, ribbon_colour)
+        achievement_size = self._fit_font_size(
+            achievement_name,
+            base=self.ACHIEVEMENT_FONT_SIZE,
+            usable=self.ACHIEVEMENT_USABLE,
+            weight=self.ACHIEVEMENT_FONT_WEIGHT,
+            min_size=self.ACHIEVEMENT_MIN,
+        )
+        return self._achievement_text_svg(
+            badge, ribbon_colour, font_size=achievement_size
+        )
 
     # ------------------------------------------------------------------
     # BADGE RENDERING
