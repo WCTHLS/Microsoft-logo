@@ -102,11 +102,7 @@ class CircleRenderer:
     # ------------------------------------------------------------------
     # MICROSOFT LOGO ASSET
     # ------------------------------------------------------------------
-    logo_path = (
-        r"C:\Users\Admin\Downloads\badge-generator (15) 1"
-        r"\badge-generator\services\badge\logo"
-        r"\microsoft_logo.png"
-    )
+    logo_path = Path(__file__).resolve().parent.parent / "logo" / "microsoft_logo.png"
 
     # ------------------------------------------------------------------
     # CIRCLE THEME COLOURS
