@@ -108,10 +108,18 @@ class DiamondRenderer(BaseRenderer):
             r, g, b = (170, 208, 240)  # fallback: blue theme light stop
 
         h, l, s = colorsys.rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
+        
+        # Ensure base lightness is bright enough so text on the dark diamond
+        # gradient is always crisp and legible (matching purple and blue).
+        l = max(l, 0.82)
+
         # Align purple themes to the real badge's cool, pale pastel lavender
         if 0.70 < h < 0.80:
             h = 0.722
             s = min(s, 0.22)
+        elif 0.40 <= h <= 0.60:  # Teal / Cyan themes
+            s = min(s, 0.35)     # Keep ice-teal bright and crisp, not dark/saturated
+
         dl, ds = tint
         l = min(1.0, max(0.0, l + dl))
         s = min(1.0, max(0.0, s + ds))
