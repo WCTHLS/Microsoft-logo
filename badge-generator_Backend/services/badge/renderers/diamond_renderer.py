@@ -47,7 +47,7 @@ class DiamondRenderer(BaseRenderer):
 
     # Target text widths as a fraction of the TEMPLATE WIDTH.
     W_TITLE = 0.650
-    W_ACTIVITY = 0.500
+    W_ACTIVITY = 0.580
     W_PROGRAM = 0.620
     W_DATE = 0.240
 
@@ -233,8 +233,21 @@ class DiamondRenderer(BaseRenderer):
     def _fit_wrapped_block(self, draw, text, target_w, max_block_h,
                            max_size, weight="semibold",
                            line_gap=1.16, min_size=14, max_lines=3):
-        """Largest font whose BALANCED wrapped block fits target_w wide AND
-        max_block_h tall (within max_lines). Returns (font, lines)."""
+        """Prefer a clean single line whenever the text can fit at a legible size (>= 22px).
+        Only wrap into balanced multiple lines for longer text."""
+        # 1. Try single line first
+        single_min = max(min_size, 22)
+        size = min(max_size, 40)
+        while size >= single_min:
+            font = self.get_font(size, weight=weight)
+            if draw.textbbox((0, 0), str(text), font=font)[2] <= target_w:
+                asc, desc = font.getmetrics()
+                lh = int(round((asc + desc) * line_gap))
+                if lh <= max_block_h:
+                    return font, [str(text)]
+            size -= 2
+
+        # 2. If it cannot fit on 1 line at >= 22px, try balanced wrapping
         size = max_size
         while size >= min_size:
             font = self.get_font(size, weight=weight)
@@ -245,7 +258,8 @@ class DiamondRenderer(BaseRenderer):
                 if lh * len(lines) <= max_block_h:
                     return font, lines
             size -= 2
-        # Last resort: shrink onto whatever fits width, ignore balance.
+
+        # Last resort: shrink onto whatever fits width
         font = self.get_font(min_size, weight=weight)
         return font, self._wrap_pixels(draw, text, font, target_w)
 
