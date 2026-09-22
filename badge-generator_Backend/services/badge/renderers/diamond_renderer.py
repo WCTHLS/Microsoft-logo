@@ -237,7 +237,7 @@ class DiamondRenderer(BaseRenderer):
         Only wrap into balanced multiple lines for longer text."""
         # 1. Try single line first
         single_min = max(min_size, 22)
-        size = min(max_size, 40)
+        size = min(max_size, 64)
         while size >= single_min:
             font = self.get_font(size, weight=weight)
             if draw.textbbox((0, 0), str(text), font=font)[2] <= target_w:
