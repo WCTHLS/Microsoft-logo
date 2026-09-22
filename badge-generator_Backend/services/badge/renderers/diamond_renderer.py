@@ -432,7 +432,7 @@ class DiamondRenderer(BaseRenderer):
             max_size=self.ACTIVITY_FONT_SIZE + 30, weight="bold",
             min_size=self.ACTIVITY_MIN_FONT, max_lines=3,
         )
-        self._draw_block_centered(image, lines, center_frac, font, colour, stroke=1)
+        self._draw_block_centered(image, lines, center_frac, font, colour, stroke=0)
 
     def draw_main_title(self, image, text):
         """Draw Main Title in ALL CAPS, BOLD white text with auto-fitting."""
