@@ -46,12 +46,16 @@ class BaseRenderer(ABC):
             "segoeui.ttf",
             os.path.join(_WIN, "segoeui.ttf"),
             "DejaVuSans.ttf",
+            "LiberationSans-Regular.ttf",
         ],
         "semibold": [
             "seguisb.ttf",
             os.path.join(_WIN, "seguisb.ttf"),
+            "segoeuib.ttf",
+            os.path.join(_WIN, "segoeuib.ttf"),
+            "DejaVuSans-Bold.ttf",
+            "LiberationSans-Bold.ttf",
             "segoeui.ttf",
-            os.path.join(_WIN, "segoeui.ttf"),
             "DejaVuSans.ttf",
         ],
         "bold": [
@@ -60,6 +64,7 @@ class BaseRenderer(ABC):
             "seguisb.ttf",
             os.path.join(_WIN, "seguisb.ttf"),
             "DejaVuSans-Bold.ttf",
+            "LiberationSans-Bold.ttf",
         ],
     }
 
