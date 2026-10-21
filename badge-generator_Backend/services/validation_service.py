@@ -22,7 +22,7 @@ class ValidationService:
         },
         "date": {
             "display": "Date",
-            "required": True
+            "required": False
         },
         "logo_name": {
             "display": "Logo Name",
@@ -183,8 +183,8 @@ class ValidationService:
 
     def _validate_date(self, date):
 
-        if date is None:
-            raise ValueError("Date is required.")
+        if date is None or str(date).strip() == "":
+            return
 
         date = str(date)
 
@@ -247,7 +247,7 @@ class ValidationService:
         )
 
         if not date:
-            raise ValueError("Date is required.")
+            return
 
         # YYYY, for example: 2026
         if re.fullmatch(r"\d{4}", date):
